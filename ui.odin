@@ -15,19 +15,41 @@ CardData :: struct {
     fg:      rl.Color,
     flipped: bool,
     slots:   bit_set[SlotPosition; i32],
+    texture: rl.Texture2D,
 }
 
 SlotData :: struct {
     pos: SlotPosition,
 }
 
-ui_tree :: proc(ui: ^UI) -> ^Node {
-    card_data := CardData {
+ui_tree :: proc(global: ^GlobalState) -> ^Node {
+    ui := &global.ui
+
+    boomerang := CardData {
         "Boomerang",
         rl.GREEN,
         rl.BLACK,
         false,
         {.BOTTOM_LEFT, .TOP_RIGHT},
+        get_texture(&global.textures, "boomerang"),
+    }
+
+    fire_wand := CardData {
+        "Fire Wand",
+        rl.RED,
+        rl.WHITE,
+        false,
+        {.BOTTOM_LEFT, .TOP_RIGHT},
+        get_texture(&global.textures, "wand"),
+    }
+
+    ice_shuriken := CardData {
+        "Ice Shuriken",
+        rl.Color{100, 180, 255, 255},
+        rl.BLACK,
+        false,
+        {.TOP_LEFT, .BOTTOM_RIGHT},
+        get_texture(&global.textures, "shuriken"),
     }
 
     return layout(ui,
@@ -38,9 +60,9 @@ ui_tree :: proc(ui: ^UI) -> ^Node {
         children = {
             layout(ui, size = {width = Grow{1}, height = Fit{}}, dir = .Row, gap = 8,
                 children = {
-                    card_ui(card_data, ui),
-                    card_ui(card_data, ui),
-                    card_ui(card_data, ui),
+                    card_ui(boomerang, ui),
+                    card_ui(fire_wand, ui),
+                    card_ui(ice_shuriken, ui),
                 },
             ),
         },
@@ -64,8 +86,9 @@ card_ui :: proc(card: CardData, ui: ^UI) -> ^Node {
                     text(ui, card.label, color = card.fg),
                 },
             ),
-            layout(ui, size = grow(),
+            layout(ui, size = grow(), justify = .Center, align = .Center,
                 children = {
+                    layout(ui, size = fixed(50, 50), texture = card.texture, tint = card.bg, object_fit = .Contain),
                     slot_ui(SlotData{.TOP_RIGHT}, ui),
                     slot_ui(SlotData{.BOTTOM_RIGHT}, ui),
                 },
@@ -108,6 +131,31 @@ draw_ui :: proc(global: ^GlobalState, node: ^Node) {
                 cast(i32)sz.x, cast(i32)sz.y,
                 v.background,
             )
+        }
+
+        if tex, ok := v.texture.?; ok {
+            tex_w := cast(f32)tex.width
+            tex_h := cast(f32)tex.height
+            source := rl.Rectangle{0, 0, tex_w, tex_h}
+            dest: rl.Rectangle
+
+            switch v.object_fit {
+            case .Fill:
+                dest = {pos.x, pos.y, sz.x, sz.y}
+            case .Contain:
+                scale := min(sz.x / tex_w, sz.y / tex_h)
+                w := tex_w * scale
+                h := tex_h * scale
+                dest = {pos.x + (sz.x - w) / 2, pos.y + (sz.y - h) / 2, w, h}
+            case .Cover:
+                scale := max(sz.x / tex_w, sz.y / tex_h)
+                crop_x := (tex_w - sz.x / scale) / 2
+                crop_y := (tex_h - sz.y / scale) / 2
+                source = {crop_x, crop_y, tex_w - crop_x * 2, tex_h - crop_y * 2}
+                dest = {pos.x, pos.y, sz.x, sz.y}
+            }
+
+            rl.DrawTexturePro(tex, source, dest, {0, 0}, 0, v.tint)
         }
 
         if v.border.width > 0 {

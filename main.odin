@@ -3,9 +3,48 @@ package main
 import rl "vendor:raylib"
 import "core:slice"
 import "core:fmt"
+import "core:os"
+import "core:strings"
+import "core:path/filepath"
 
 SCREEN_WIDTH :: 800
 SCREEN_HEIGHT :: 450 
+
+Textures :: map[string]rl.Texture2D
+
+load_textures :: proc(dir: string) -> Textures {
+    textures: Textures
+    handle, err := os.open(dir)
+    if err != nil { return textures }
+    defer os.close(handle)
+
+    entries, read_err := os.read_dir(handle, -1, context.allocator)
+    if read_err != nil { return textures }
+
+    for entry in entries {
+        ext := filepath.ext(entry.name)
+        if ext != ".png" { continue }
+        name := strings.trim_suffix(entry.name, ext)
+        full_path, _ := filepath.join({dir, entry.name}, context.allocator)
+        path := strings.clone_to_cstring(full_path)
+        textures[name] = rl.LoadTexture(path)
+    }
+    return textures
+}
+
+unload_textures :: proc(textures: ^Textures) {
+    for _, tex in textures {
+        rl.UnloadTexture(tex)
+    }
+    delete(textures^)
+}
+
+get_texture :: proc(textures: ^Textures, name: string) -> rl.Texture2D {
+    if tex, ok := textures[name]; ok {
+        return tex
+    }
+    return {}
+}
 
 GlobalState :: struct {
     world: World,
@@ -14,6 +53,7 @@ GlobalState :: struct {
     ui: UI,
     debug: DebugState,
     Camera: rl.Camera2D,
+    textures: Textures,
 }
 
 DebugState :: struct {
@@ -155,6 +195,9 @@ main :: proc() {
     rl.SetTextureFilter(global.font.texture, .BILINEAR)
     rl.SetTextLineSpacing(72)
 
+    global.textures = load_textures("assets/img")
+    defer unload_textures(&global.textures)
+
     for !rl.WindowShouldClose() {
         current_time := rl.GetTime()
         delta_time := cast(f32)(current_time - last_time)
@@ -180,7 +223,7 @@ main :: proc() {
         rl.EndMode2D()
 
         begin_frame(&global.ui)
-        tree := ui_tree(&global.ui)
+        tree := ui_tree(&global)
         compute_layout(tree, global.font, cast(f32)global.window.width, cast(f32)global.window.height)
         process_interactions(&global.ui, tree)
         end_frame(&global.ui)
