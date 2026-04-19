@@ -60,6 +60,8 @@ Justify :: enum { Start, Center, End, Space_Between }
 
 Align :: enum { Start, Center, End }
 
+ObjectFit :: enum { Fill, Contain, Cover }
+
 Border :: struct {
     color: rl.Color,
     width: f32,
@@ -82,6 +84,9 @@ Layout_Node :: struct {
     align:      Align,
     background: rl.Color,
     border:     Border,
+    texture:    Maybe(rl.Texture2D),
+    tint:       rl.Color,
+    object_fit: ObjectFit,
     children:   [dynamic]^Node,
     computed_pos:  rl.Vector2,
     computed_size: rl.Vector2,
@@ -171,6 +176,9 @@ layout :: proc(
     align: Align = .Start,
     bg: rl.Color = rl.BLANK,
     border: Border = {},
+    texture: Maybe(rl.Texture2D) = nil,
+    tint: rl.Color = rl.WHITE,
+    object_fit: ObjectFit = .Fill,
     children: ..^Node,
 ) -> ^Node {
     idx := assign_idx(ui, reserved_idx)
@@ -189,6 +197,9 @@ layout :: proc(
         align      = align,
         background = bg,
         border     = border,
+        texture    = texture,
+        tint       = tint,
+        object_fit = object_fit,
         children   = kids,
     }
     return n
