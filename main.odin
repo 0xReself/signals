@@ -52,7 +52,7 @@ GlobalState :: struct {
     font: rl.Font,
     ui: UI,
     debug: DebugState,
-    Camera: rl.Camera2D,
+    camera: rl.Camera2D,
     textures: Textures,
 }
 
@@ -133,7 +133,7 @@ toggle_debug_system :: TickSystem {
 
 setup_camera_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
-        global.Camera = rl.Camera2D{
+        global.camera = rl.Camera2D{
             {cast(f32)global.window.width/2, cast(f32)global.window.height/2},
             {cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2},
             0,
@@ -157,7 +157,7 @@ follow_player_system :: TickSystem {
 
         assert(player_transform != nil, "There must be a player entity with a transform component")
 
-        global.Camera.target = rl.Vector2{player_transform.x, player_transform.y}
+        global.camera.target = rl.Vector2{player_transform.x, player_transform.y}
     }
 }
 
@@ -179,7 +179,7 @@ main_menu_render_system :: TickSystem {
         rl.DrawTextEx(
             global.font, 
             "Press Space to Start", 
-            rl.Vector2{cast(f32)global.window.width/2 - 100, cast(f32)global.window.height/2 - 50}, 
+            rl.Vector2{cast(f32)global.window.width/4 - 200, cast(f32)global.window.height/2 - 50}, 
             72, 
             0, 
             rl.WHITE
@@ -233,7 +233,10 @@ main :: proc() {
     }
 
 
+    add_system(&global.world.states[.MainMenu].tick_systems, setup_camera_system)
     add_system(&global.world.states[.Arena].tick_systems, setup_camera_system)
+    add_system(&global.world.states[.ModulePhase].tick_systems, setup_camera_system)
+    add_system(&global.world.states[.Dead].tick_systems, setup_camera_system)
     add_system(&global.world.states[.Arena].tick_systems, follow_player_system)
    
     add_system(&global.world.states[.MainMenu].tick_systems, main_menu_input_system)
@@ -291,7 +294,7 @@ main :: proc() {
         rl.BeginDrawing()
         rl.ClearBackground(rl.BLACK)
         
-        rl.BeginMode2D(global.Camera)
+        rl.BeginMode2D(global.camera)
         for system in global.world.states[global.world.current_state].render_systems.systems {
             system.update(&global, delta_time)
         }
