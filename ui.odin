@@ -48,11 +48,12 @@ render_card_system :: TickSystem {
                 card.bg
             )
 
-            rl.DrawText(
+            rl.DrawTextEx(
+                global.font,
                 card.label,
-                cast(i32)transform.x, 
-                cast(i32)transform.y, 
-                12,
+                { transform.x, transform.y },
+                18,
+                0,
                 card.fg
             )
         }

@@ -107,11 +107,12 @@ main :: proc() {
 	deduplicated := codepoints_remove_duplicates(codepoints[:codepoint_count])
 	rl.UnloadCodepoints(codepoints)
 
-    global.font := rl.LoadFontEx("assets/JetBrainsMono-Regular.ttf", 36, raw_data(deduplicated), i32(len(deduplicated)))
+    font := rl.LoadFontEx("assets/JetBrainsMono-Regular.ttf", 36, raw_data(deduplicated), i32(len(deduplicated)))
+    global.font = font
 	defer rl.UnloadFont(global.font)
     delete(deduplicated)
 
-    rl.SetTextureFilter(font.texture, .BILINEAR)
+    rl.SetTextureFilter(global.font.texture, .BILINEAR)
     rl.SetTextLineSpacing(72)
 
     for !rl.WindowShouldClose() {
