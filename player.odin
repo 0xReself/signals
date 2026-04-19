@@ -1,6 +1,7 @@
 package main
 
 import rl "vendor:raylib"
+import "core:fmt"
 
 PlayerData :: struct {
     _: bool, // Just to have some data in player component for now
@@ -59,6 +60,31 @@ player_damage_system :: TickSystem {
     }
 }
 
+collect_experience_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        fmt.println("Collecting experience...", global.experience)
+        for player_entity, _ in global.world.players.index {
+            player_transform := get_component(&global.world.transforms, player_entity)
+            player_hitbox := get_component(&global.world.circle_hitboxes, player_entity)
+
+            for exp_entity, _ in global.world.experience.index {
+                exp_transform := get_component(&global.world.transforms, exp_entity)
+                exp := get_component(&global.world.experience, exp_entity)
+
+                distance := rl.Vector2Distance(
+                    rl.Vector2{player_transform.x, player_transform.y}, 
+                    rl.Vector2{exp_transform.x, exp_transform.y}
+                )
+
+                if distance < player_hitbox.radius * 5 {
+                    global.experience += exp.amount 
+                    delete_entity(&global.world, exp_entity)
+                }
+            }
+        }
+    }
+}
+
 create_player_system :: System {
     proc(global: ^GlobalState) {
         entity := create_entity(&global.world)
@@ -68,6 +94,19 @@ create_player_system :: System {
         add_component(&global.world.render, entity, RenderData{})
         add_component(&global.world.health, entity, HealthData{100, 100})
         add_component(&global.world.circle_hitboxes, entity, CircleHitbox{12.5})
+
+        boomerang := create_entity(&global.world)
+        add_component(&global.world.transforms, boomerang, 
+            TransformData{0.0, 0.0})
+        add_component(&global.world.boomerangs, boomerang, BoomerangData{
+            flight_away = false,
+            target = nil,
+            throw_distance = 300.0,
+            speed = 400.0,
+            hit_enemies = nil,
+        })
+        add_component(&global.world.render, boomerang, RenderData{})
+        add_component(&global.world.circle_hitboxes, boomerang, CircleHitbox{10.0})
     }
 }
 
@@ -116,4 +155,5 @@ register_player_systems :: proc(global: ^GlobalState) {
     add_system(&global.world.states[.Arena].tick_systems, player_movement_system)
     add_system(&global.world.states[.Arena].tick_systems, player_damage_system)
     add_system(&global.world.states[.Arena].render_systems, player_render_system)
+    add_system(&global.world.states[.Arena].tick_systems, collect_experience_system)
 }

@@ -49,6 +49,7 @@ spawn_enemy_system :: TickSystem {
                 )
                 add_component(&global.world.render, enemy_entity, RenderData{})
                 add_component(&global.world.circle_colliders, enemy_entity, CircleCollider{12.5})
+                add_component(&global.world.health, enemy_entity, HealthData{10, 10})
             }
         }
     }

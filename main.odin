@@ -54,6 +54,7 @@ GlobalState :: struct {
     debug: DebugState,
     camera: rl.Camera2D,
     textures: Textures,
+    experience: i32,
 }
 
 DebugState :: struct {
@@ -80,12 +81,16 @@ HealthData :: struct {
     max: i32,
 }
 
+ExperienceData :: struct {
+    amount: i32,
+}
+
 kill_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
         for entity, _ in global.world.health.index {
             health := get_component(&global.world.health, entity)
+            transform := get_component(&global.world.transforms, entity)
             player := get_component(&global.world.players, entity)
-            fmt.println("Checking health...", player)
             if player != nil {
                 fmt.println("Player health: ", health.current, "/", health.max)
             }
@@ -97,9 +102,35 @@ kill_system :: TickSystem {
             if health.current <= 0 {
                 if player != nil {
                     change_state(global, .Dead)
+                } else {
+                    exp := create_entity(&global.world) 
+                    add_component(&global.world.transforms, exp, TransformData{transform.x, transform.y})    
+                    add_component(&global.world.experience, exp, ExperienceData{rl.GetRandomValue(1, 5)})
+                    add_component(&global.world.render, exp, RenderData{})
+                    delete_entity(&global.world, entity)
                 }
-                delete_entity(&global.world, entity)
             }
+        }
+    }
+}
+
+render_experience_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        for entity, _ in global.world.experience.index {
+            transform := get_component(&global.world.transforms, entity)
+            exp := get_component(&global.world.experience, entity)
+            render := get_component(&global.world.render, entity)
+
+            assert(transform != nil, "Experience entity must have a transform component")
+            assert(exp != nil, "Experience entity must have an experience component")
+            assert(render != nil, "Experience entity must have a render component")
+
+            rl.DrawCircle(
+                cast(i32)transform.x, 
+                cast(i32)transform.y,
+                cast(f32)exp.amount,
+                rl.Color{255, 255, 0, 127}
+            )
         }
     }
 }
@@ -238,6 +269,7 @@ main :: proc() {
     add_system(&global.world.states[.ModulePhase].tick_systems, setup_camera_system)
     add_system(&global.world.states[.Dead].tick_systems, setup_camera_system)
     add_system(&global.world.states[.Arena].tick_systems, follow_player_system)
+    add_system(&global.world.states[.Arena].render_systems, render_experience_system)
    
     add_system(&global.world.states[.MainMenu].tick_systems, main_menu_input_system)
     add_system(&global.world.states[.MainMenu].render_systems, main_menu_render_system)
@@ -247,6 +279,7 @@ main :: proc() {
     register_player_systems(&global)
     register_enemy_systems(&global)
     register_collision_systems(&global)
+    register_weapon_systems(&global)
     
     add_system(&global.world.states[.Arena].tick_systems, kill_system)
 

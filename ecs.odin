@@ -16,6 +16,8 @@ World :: struct {
     circle_hitboxes: ComponentStorage(CircleHitbox),
     health: ComponentStorage(HealthData),
     momentum: ComponentStorage(MomentumData),
+    boomerangs: ComponentStorage(BoomerangData),
+    experience: ComponentStorage(ExperienceData),
 
     states: map[States]^State,
 }
@@ -33,6 +35,8 @@ delete_entity :: proc(world: ^World, entity: Entity) {
     delete_key(&world.circle_hitboxes.index, entity)
     delete_key(&world.health.index, entity)
     delete_key(&world.momentum.index, entity)
+    delete_key(&world.boomerangs.index, entity)
+    delete_key(&world.experience.index, entity)
 }
 
 create_entity :: proc(world: ^World) -> Entity {
