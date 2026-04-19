@@ -66,11 +66,8 @@ decay_momentum_system :: TickSystem {
             transform.y += momentum.y * delta_time
             momentum.x *= 0.99 
             momentum.y *= 0.99
-            if abs(momentum.x) < 0.01 {
-                momentum.x = 0
-            }
-            if abs(momentum.y) < 0.01 {
-                momentum.y = 0
+            if abs(momentum.x) < 0.01 && abs(momentum.y) < 0.01 {
+                remove_component(&global.world.momentum, entity)
             }
         }
     }

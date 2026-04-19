@@ -3,6 +3,7 @@ package main
 Entity :: distinct u32
 World :: struct {
     next_entity: Entity,
+    current_state: State,
 
     transforms: ComponentStorage(TransformData),
     players: ComponentStorage(PlayerData),
@@ -15,11 +16,10 @@ World :: struct {
     health: ComponentStorage(HealthData),
     momentum: ComponentStorage(MomentumData),
 
-    init_systems: SystemStorage(System),
-    tick_systems: SystemStorage(TickSystem),
-    render_systems: SystemStorage(TickSystem),
 }
 
+//TODO: hacky just delete the entry of hashmap not the data, should implement 
+// some kind of free list for components to reuse data
 delete_entity :: proc(world: ^World, entity: Entity) {
     delete_key(&world.transforms.index, entity)
     delete_key(&world.players.index, entity)
@@ -39,6 +39,11 @@ create_entity :: proc(world: ^World) -> Entity {
     return entity
 }
 
+State :: struct {
+    init_systems: SystemStorage(System),
+    tick_systems: SystemStorage(TickSystem),
+    render_systems: SystemStorage(TickSystem),
+}
 
 ComponentStorage :: struct($T: typeid) {
     data: [dynamic]T,
@@ -57,6 +62,15 @@ get_component :: proc(storage: ^ComponentStorage($T), entity: Entity) -> ^T {
         return nil
     }
     return &storage.data[idx]
+}
+
+//TODO: hacky just delete the entry of hashmap not the data
+remove_component :: proc(storage: ^ComponentStorage($T), entity: Entity) {
+    idx, ok := storage.index[entity]
+    if !ok || idx < 0 || idx >= len(storage.data) {
+        return
+    }
+    delete_key(&storage.index, entity)
 }
 
 System :: struct {
