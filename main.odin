@@ -2,15 +2,23 @@ package main
 
 import rl "vendor:raylib"
 import "core:slice"
+import "core:fmt"
 
 SCREEN_WIDTH :: 800
-SCREEN_HEIGHT :: 450
+SCREEN_HEIGHT :: 450 
 
 GlobalState :: struct {
     world: World,
     window: Window,
     font: rl.Font,
     ui: UI,
+    debug: DebugState,
+    Camera: rl.Camera2D,
+}
+
+DebugState :: struct {
+    draw_colliders: bool,
+    show_fps: bool,
 }
 
 Window :: struct {
@@ -23,71 +31,107 @@ TransformData :: struct {
     y: f32,
 }
 
-PlayerData :: struct {}
-EnemyData :: struct {}
 RenderData :: struct {
-    color: rl.Color
+    _: bool,
 }
 
+HealthData :: struct {
+    current: i32,
+    max: i32,
+}
 
-create_player_system :: System {
-    proc(global: ^GlobalState) {
-        entity := create_entity(&global.world)
-        add_component(&global.world.transforms, entity, 
-            TransformData{cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2})
-        add_component(&global.world.players, entity, PlayerData{})
-        add_component(&global.world.render, entity, RenderData{rl.BLUE})
+kill_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        for entity, _ in global.world.health.index {
+            health := get_component(&global.world.health, entity)
+            player := get_component(&global.world.players, entity)
+            fmt.println("Checking health...", player)
+            if player != nil {
+                fmt.println("Player health: ", health.current, "/", health.max)
+            }
+            if health == nil {
+                continue
+            }
+
+            if health.current <= 0 {
+                delete_entity(&global.world, entity)
+            }
+        }
     }
 }
 
-player_render_system :: TickSystem {
+debug_colliders_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
-        for entity, _ in global.world.players.index {
+        if !global.debug.draw_colliders {
+            return
+        }
+        for entity, _ in global.world.circle_colliders.index {
             transform := get_component(&global.world.transforms, entity)
-            render := get_component(&global.world.render, entity)
+            collider := get_component(&global.world.circle_colliders, entity)
 
-            assert(transform != nil, "Player entity must have a transform component")
-            assert(render != nil, "Player entity must have a render component")
-
-            rl.DrawRectangleV(
-                rl.Vector2{transform.x, transform.y}, 
-                rl.Vector2{25, 25}, 
-                render.color
+            rl.DrawCircle(
+                cast(i32)transform.x, 
+                cast(i32)transform.y, 
+                collider.radius, 
+                rl.Color{0, 255, 0, 20}
             )
         }
     }
 }
 
-player_movement_system :: TickSystem {
-    proc(global: ^GlobalState, detla_time: f32) {
-        for entity, _ in global.world.players.index {
-            transform := get_component(&global.world.transforms, entity)
-            assert(transform != nil, "Player entity must have a transform component")
-
-            if rl.IsKeyDown(.D) {
-                transform.x += 100 * detla_time 
-            }
-            if rl.IsKeyDown(.A) {
-                transform.x -= 100 * detla_time
-            }
-            if rl.IsKeyDown(.W) {
-                transform.y -= 100 * detla_time
-            }
-            if rl.IsKeyDown(.S) {
-                transform.y += 100 * detla_time
-            }
+toggle_debug_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        if rl.IsKeyPressed(.F1) {
+            global.debug.draw_colliders = !global.debug.draw_colliders
         }
     }
 }
 
+setup_camera_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        global.Camera = rl.Camera2D{
+            {cast(f32)global.window.width/2, cast(f32)global.window.height/2},
+            {cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2},
+            0,
+            1,
+        }
+    }
+}
 
-chars: cstring = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
+follow_player_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        player_transform: ^TransformData = nil
+
+        for player, _ in global.world.players.index {
+            player_transform = get_component(&global.world.transforms, player)
+            if player_transform == nil {
+                continue
+            }
+
+            break
+        }
+
+        assert(player_transform != nil, "There must be a player entity with a transform component")
+
+        global.Camera.target = rl.Vector2{player_transform.x, player_transform.y}
+    }
+}
+
+text_chars: cstring = "@#$%&ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
 
 main :: proc() {
     global := GlobalState{}
-    add_system(&global.world.init_systems, create_player_system)
-    add_system(&global.world.tick_systems, player_movement_system)
-    add_system(&global.world.render_systems, player_render_system)
+    add_system(&global.world.tick_systems, setup_camera_system)
+    add_system(&global.world.tick_systems, follow_player_system)
+
+    register_player_systems(&global)
+    register_enemy_systems(&global)
+    register_collision_systems(&global)
+    
+    add_system(&global.world.tick_systems, kill_system)
+
+    add_system(&global.world.tick_systems, toggle_debug_system)
+    add_system(&global.world.render_systems, debug_colliders_system)
 
     rl.SetConfigFlags({.WINDOW_RESIZABLE})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Signals")
@@ -98,10 +142,8 @@ main :: proc() {
     rl.SetTargetFPS(144)
     last_time := rl.GetTime()
 
-
-    // Font loading
     codepoint_count: i32
-	codepoints   := rl.LoadCodepoints(chars, &codepoint_count)
+	codepoints   := rl.LoadCodepoints(text_chars, &codepoint_count)
 	deduplicated := codepoints_remove_duplicates(codepoints[:codepoint_count])
 	rl.UnloadCodepoints(codepoints)
 
@@ -118,7 +160,6 @@ main :: proc() {
         delta_time := cast(f32)(current_time - last_time)
         last_time = current_time
 
-        //Get Current window dimensions for global state
         global.window.width = rl.GetScreenWidth()
         global.window.height = rl.GetScreenHeight()
 
@@ -131,10 +172,12 @@ main :: proc() {
 
         rl.BeginDrawing()
         rl.ClearBackground(rl.BLACK)
-
+        
+        rl.BeginMode2D(global.Camera)
         for system in global.world.render_systems.systems {
             system.update(&global, delta_time)
         }
+        rl.EndMode2D()
 
         begin_frame(&global.ui)
         tree := ui_tree(&global.ui)
