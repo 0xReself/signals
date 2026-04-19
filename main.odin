@@ -2,11 +2,13 @@ package main
 
 import "core:fmt"
 import rl "vendor:raylib"
+import "core:slice"
 
 GlobalState :: struct {
     screen_width: u32,
     screen_height: u32,
-    world: World 
+    world: World,
+    font: rl.Font
 }
 
 
@@ -73,6 +75,9 @@ player_movement_system :: TickSystem {
 SCREEN_WIDTH :: 800
 SCREEN_HEIGHT :: 450
 
+
+text: cstring = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
+
 main :: proc() {
     global := GlobalState{
         SCREEN_WIDTH,
@@ -83,6 +88,10 @@ main :: proc() {
     add_system(&global.world.tick_systems, player_movement_system)
     add_system(&global.world.render_systems, player_render_system)
 
+    add_system(&global.world.init_systems, create_card_system)
+    add_system(&global.world.ui_systems, render_card_system)
+
+
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Signals")
 
     for system in global.world.init_systems.systems {
@@ -90,6 +99,21 @@ main :: proc() {
     }
     rl.SetTargetFPS(144)
     last_time := rl.GetTime()
+
+
+    // Font loading
+    codepoint_count: i32
+	codepoints   := rl.LoadCodepoints(text, &codepoint_count)
+	deduplicated := codepoints_remove_duplicates(codepoints[:codepoint_count])
+	rl.UnloadCodepoints(codepoints)
+
+    global.font := rl.LoadFontEx("assets/JetBrainsMono-Regular.ttf", 36, raw_data(deduplicated), i32(len(deduplicated)))
+	defer rl.UnloadFont(global.font)
+    delete(deduplicated)
+
+    rl.SetTextureFilter(font.texture, .BILINEAR)
+    rl.SetTextLineSpacing(72)
+
     for !rl.WindowShouldClose() {
         current_time := rl.GetTime()
         delta_time := cast(f32)(current_time - last_time)
@@ -116,4 +140,10 @@ main :: proc() {
     }
 
     rl.CloseWindow()
+}
+
+codepoints_remove_duplicates :: proc (codepoints: []rune) -> (deduplicated: []rune) {
+	deduplicated = slice.clone(codepoints)
+	slice.sort(deduplicated)
+	return slice.unique(deduplicated)
 }
