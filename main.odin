@@ -80,7 +80,7 @@ player_movement_system :: TickSystem {
 }
 
 
-text: cstring = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
+chars: cstring = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
 
 main :: proc() {
     global := GlobalState{}
@@ -103,7 +103,7 @@ main :: proc() {
 
     // Font loading
     codepoint_count: i32
-	codepoints   := rl.LoadCodepoints(text, &codepoint_count)
+	codepoints   := rl.LoadCodepoints(chars, &codepoint_count)
 	deduplicated := codepoints_remove_duplicates(codepoints[:codepoint_count])
 	rl.UnloadCodepoints(codepoints)
 
@@ -138,9 +138,9 @@ main :: proc() {
             system.update(&global, delta_time)
         }
 
-        for system in global.world.ui_systems.systems {
-            system.update(&global, delta_time)
-        }
+        tree := ui_tree()
+        draw_ui(&global, tree, {0, 0})
+
         rl.EndDrawing()
     }
 
