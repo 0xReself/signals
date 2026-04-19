@@ -1,9 +1,10 @@
 package main
 
+
 Entity :: distinct u32
 World :: struct {
     next_entity: Entity,
-    current_state: State,
+    current_state: States,
 
     transforms: ComponentStorage(TransformData),
     players: ComponentStorage(PlayerData),
@@ -16,6 +17,7 @@ World :: struct {
     health: ComponentStorage(HealthData),
     momentum: ComponentStorage(MomentumData),
 
+    states: map[States]^State,
 }
 
 //TODO: hacky just delete the entry of hashmap not the data, should implement 
@@ -39,10 +41,33 @@ create_entity :: proc(world: ^World) -> Entity {
     return entity
 }
 
+change_state :: proc(global: ^GlobalState, new_state: States) {
+    global.world.current_state = new_state
+    for system in global.world.states[global.world.current_state].init_systems.systems {
+        system.update(global)
+    }
+
+    if global.world.states[global.world.current_state].initial_run {
+        global.world.states[global.world.current_state].initial_run = false
+        for system in global.world.states[global.world.current_state].first_system.systems {
+            system.update(global)
+        }
+    }
+}
+
 State :: struct {
+    initial_run: bool,
+    first_system: SystemStorage(System),
     init_systems: SystemStorage(System),
     tick_systems: SystemStorage(TickSystem),
     render_systems: SystemStorage(TickSystem),
+}
+
+States :: enum {
+    MainMenu,
+    Arena,
+    ModulePhase,
+    Dead,
 }
 
 ComponentStorage :: struct($T: typeid) {

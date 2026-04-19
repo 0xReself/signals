@@ -108,8 +108,8 @@ enemy_movement_system :: TickSystem {
 }
 
 register_enemy_systems :: proc(global: ^GlobalState) {
-    add_system(&global.world.init_systems, create_enemy_spawner_system)
-    add_system(&global.world.tick_systems, spawn_enemy_system)
-    add_system(&global.world.tick_systems, enemy_movement_system)
-    add_system(&global.world.render_systems, render_enemy_system)
+    add_system(&global.world.states[.Arena].first_system, create_enemy_spawner_system)
+    add_system(&global.world.states[.Arena].tick_systems, spawn_enemy_system)
+    add_system(&global.world.states[.Arena].tick_systems, enemy_movement_system)
+    add_system(&global.world.states[.Arena].render_systems, render_enemy_system)
 }

@@ -112,8 +112,8 @@ player_movement_system :: TickSystem {
 }
 
 register_player_systems :: proc(global: ^GlobalState) {
-    add_system(&global.world.init_systems, create_player_system)
-    add_system(&global.world.tick_systems, player_movement_system)
-    add_system(&global.world.tick_systems, player_damage_system)
-    add_system(&global.world.render_systems, player_render_system)
+    add_system(&global.world.states[.Arena].first_system, create_player_system)
+    add_system(&global.world.states[.Arena].tick_systems, player_movement_system)
+    add_system(&global.world.states[.Arena].tick_systems, player_damage_system)
+    add_system(&global.world.states[.Arena].render_systems, player_render_system)
 }

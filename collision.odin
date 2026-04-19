@@ -74,6 +74,6 @@ decay_momentum_system :: TickSystem {
 }
 
 register_collision_systems :: proc(global: ^GlobalState) {
-    add_system(&global.world.tick_systems, resolve_collision_system)
-    add_system(&global.world.tick_systems, decay_momentum_system)
+    add_system(&global.world.states[.Arena].tick_systems, resolve_collision_system)
+    add_system(&global.world.states[.Arena].tick_systems, decay_momentum_system)
 }

@@ -49,11 +49,15 @@ kill_system :: TickSystem {
             if player != nil {
                 fmt.println("Player health: ", health.current, "/", health.max)
             }
+
             if health == nil {
                 continue
             }
 
             if health.current <= 0 {
+                if player != nil {
+                    change_state(global, .Dead)
+                }
                 delete_entity(&global.world, entity)
             }
         }
@@ -117,28 +121,99 @@ follow_player_system :: TickSystem {
     }
 }
 
+dead_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        rl.DrawTextEx(
+            global.font, 
+            "You Died", 
+            rl.Vector2{cast(f32)global.window.width/2 - 100, cast(f32)global.window.height/2 - 50}, 
+            72, 
+            0, 
+            rl.RED
+        )
+    }
+}
+
+main_menu_render_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        rl.DrawTextEx(
+            global.font, 
+            "Press Space to Start", 
+            rl.Vector2{cast(f32)global.window.width/2 - 100, cast(f32)global.window.height/2 - 50}, 
+            72, 
+            0, 
+            rl.WHITE
+        )
+    }
+}
+
+main_menu_input_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        if rl.IsKeyPressed(.SPACE) {
+            change_state(global, .Arena)
+        }
+    }
+}
+
 text_chars: cstring = "@#$%&ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
 
 main :: proc() {
     global := GlobalState{}
-    add_system(&global.world.tick_systems, setup_camera_system)
-    add_system(&global.world.tick_systems, follow_player_system)
+
+    global.world.states[.MainMenu] = &State{
+        initial_run = true,
+        first_system = SystemStorage(System){},
+        init_systems = SystemStorage(System){},
+        tick_systems = SystemStorage(TickSystem){},
+        render_systems = SystemStorage(TickSystem){},
+    }
+
+    global.world.states[.Arena] = &State{
+        initial_run = true,
+        first_system = SystemStorage(System){},
+        init_systems = SystemStorage(System){},
+        tick_systems = SystemStorage(TickSystem){},
+        render_systems = SystemStorage(TickSystem){},
+    }
+
+    global.world.states[.ModulePhase] = &State{
+        initial_run = true,
+        first_system = SystemStorage(System){},
+        init_systems = SystemStorage(System){},
+        tick_systems = SystemStorage(TickSystem){},
+        render_systems = SystemStorage(TickSystem){},
+    }
+
+    global.world.states[.Dead] = &State{
+        initial_run = true,
+        first_system = SystemStorage(System){},
+        init_systems = SystemStorage(System){},
+        tick_systems = SystemStorage(TickSystem){},
+        render_systems = SystemStorage(TickSystem){},
+    }
+
+
+    add_system(&global.world.states[.Arena].tick_systems, setup_camera_system)
+    add_system(&global.world.states[.Arena].tick_systems, follow_player_system)
+   
+    add_system(&global.world.states[.MainMenu].tick_systems, main_menu_input_system)
+    add_system(&global.world.states[.MainMenu].render_systems, main_menu_render_system)
+
+    add_system(&global.world.states[.Dead].tick_systems, dead_system)
 
     register_player_systems(&global)
     register_enemy_systems(&global)
     register_collision_systems(&global)
     
-    add_system(&global.world.tick_systems, kill_system)
+    add_system(&global.world.states[.Arena].tick_systems, kill_system)
 
-    add_system(&global.world.tick_systems, toggle_debug_system)
-    add_system(&global.world.render_systems, debug_colliders_system)
+    add_system(&global.world.states[.Arena].tick_systems, toggle_debug_system)
+    add_system(&global.world.states[.Arena].render_systems, debug_colliders_system)
 
+    change_state(&global, .MainMenu)
     rl.SetConfigFlags({.WINDOW_RESIZABLE})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Signals")
 
-    for system in global.world.init_systems.systems {
-        system.update(&global)
-    }
     rl.SetTargetFPS(144)
     last_time := rl.GetTime()
 
@@ -166,7 +241,7 @@ main :: proc() {
         if rl.IsKeyDown(.ESCAPE) {
             break;
         }
-        for system in global.world.tick_systems.systems {
+        for system in global.world.states[global.world.current_state].tick_systems.systems {
             system.update(&global, delta_time)
         }
 
@@ -174,17 +249,19 @@ main :: proc() {
         rl.ClearBackground(rl.BLACK)
         
         rl.BeginMode2D(global.Camera)
-        for system in global.world.render_systems.systems {
+        for system in global.world.states[global.world.current_state].render_systems.systems {
             system.update(&global, delta_time)
         }
         rl.EndMode2D()
-
-        begin_frame(&global.ui)
-        tree := ui_tree(&global.ui)
-        compute_layout(tree, global.font, cast(f32)global.window.width, cast(f32)global.window.height)
-        process_interactions(&global.ui, tree)
-        end_frame(&global.ui)
-        draw_ui(&global, tree)
+        
+        if global.world.current_state == .Arena {
+            begin_frame(&global.ui)
+            tree := ui_tree(&global.ui)
+            compute_layout(tree, global.font, cast(f32)global.window.width, cast(f32)global.window.height)
+            process_interactions(&global.ui, tree)
+            end_frame(&global.ui)
+            draw_ui(&global, tree)
+        }
 
         rl.EndDrawing()
     }
