@@ -2,6 +2,7 @@ package main
 
 import rl "vendor:raylib"
 import "core:slice"
+import "core:fmt"
 
 SCREEN_WIDTH :: 800
 SCREEN_HEIGHT :: 450 
@@ -9,7 +10,14 @@ SCREEN_HEIGHT :: 450
 GlobalState :: struct {
     world: World,
     window: Window,
-    font: rl.Font
+    font: rl.Font,
+    debug: DebugState,
+    Camera: rl.Camera2D,
+}
+
+DebugState :: struct {
+    draw_colliders: bool,
+    show_fps: bool,
 }
 
 Window :: struct {
@@ -22,182 +30,107 @@ TransformData :: struct {
     y: f32,
 }
 
-PlayerData :: struct {}
-
-ENEMY_LABELS :: [5]cstring {"@", "#", "$", "%", "&"}
-EnemyData :: struct {
-    label: cstring,
-    speed: f32,
-}
 RenderData :: struct {
     _: bool, // Just to have some data in render component for now
 }
 
-CircleCollider :: struct {
-    radius: f32
+HealthData :: struct {
+    current: i32,
+    max: i32,
 }
 
-EnemySpawnerData :: struct {
-    timer: f32,
-    interval: f32, // how much seconds to spawn enemy
-}
-
-create_enemy_spawner_system :: System {
-    proc(global: ^GlobalState) {
-        entity := create_entity(&global.world)
-        add_component(&global.world.enemy_spawners, entity, EnemySpawnerData{0, 2})
-    }
-}
-
-spawn_enemy_system :: TickSystem {
+kill_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
-        for entity, _ in global.world.enemy_spawners.index {
-            spawner := get_component(&global.world.enemy_spawners, entity)
-            if spawner == nil {
+        for entity, _ in global.world.health.index {
+            health := get_component(&global.world.health, entity)
+            player := get_component(&global.world.players, entity)
+            fmt.println("Checking health...", player)
+            if player != nil {
+                fmt.println("Player health: ", health.current, "/", health.max)
+            }
+            if health == nil {
                 continue
             }
 
-            spawner.timer += delta_time
-            if spawner.timer >= spawner.interval {
-                spawner.timer = 0
-
-                enemy_entity := create_entity(&global.world)
-
-                //Get somewhat random position on screen
-                width := rl.GetRandomValue(0, global.window.height)
-                height := rl.GetRandomValue(0, global.window.height)
-                add_component(&global.world.transforms, enemy_entity, 
-                    TransformData{cast(f32)width, cast(f32)height})
-
-                //Get random label for enemy
-                label_index := rl.GetRandomValue(0, len(ENEMY_LABELS)-1)
-                labels := ENEMY_LABELS
-                add_component(&global.world.enemies, 
-                    enemy_entity, 
-                    EnemyData{labels[label_index], 50}
-                )
-                add_component(&global.world.render, enemy_entity, RenderData{})
+            if health.current <= 0 {
+                delete_entity(&global.world, entity)
             }
         }
     }
 }
 
-render_enemy_system :: TickSystem {
+debug_colliders_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
-        for entity, _ in global.world.enemies.index {
+        if !global.debug.draw_colliders {
+            return
+        }
+        for entity, _ in global.world.circle_colliders.index {
             transform := get_component(&global.world.transforms, entity)
-            render := get_component(&global.world.render, entity)
-            enemy := get_component(&global.world.enemies, entity)
+            collider := get_component(&global.world.circle_colliders, entity)
 
-            assert(transform != nil, "Enemy entity must have a transform component")
-            assert(render != nil, "Enemy entity must have a render component")
-
-            rl.DrawTextEx(
-                global.font,
-                enemy.label,
-                { transform.x, transform.y },
-                36,
-                0,
-                rl.Color{255, 255, 255, 127}
+            rl.DrawCircle(
+                cast(i32)transform.x, 
+                cast(i32)transform.y, 
+                collider.radius, 
+                rl.Color{0, 255, 0, 20}
             )
         }
     }
 }
 
-enemy_movement_system :: TickSystem {
+toggle_debug_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
-        for entity, _ in global.world.enemies.index {
-            transform := get_component(&global.world.transforms, entity)
-            assert(transform != nil, "Enemy entity must have a transform component")
-            enemy := get_component(&global.world.enemies, entity)
-
-            player_transform: ^TransformData = nil
-
-            for player, _ in global.world.players.index {
-                player_transform = get_component(&global.world.transforms, player)
-                if player_transform == nil {
-                    continue
-                }
-
-                break
-            }
-
-            assert(player_transform != nil, "There must be a player entity with a transform component")
-            
-            current_position := rl.Vector2{transform.x, transform.y}
-            player_position := rl.Vector2{player_transform.x, player_transform.y}
-            direction := player_position - current_position
-            normalized_direction := rl.Vector2Normalize(direction)
-            
-            transform.x += normalized_direction.x * enemy.speed * delta_time
-            transform.y += normalized_direction.y * enemy.speed * delta_time
+        if rl.IsKeyPressed(.F1) {
+            global.debug.draw_colliders = !global.debug.draw_colliders
         }
     }
 }
 
-create_player_system :: System {
-    proc(global: ^GlobalState) {
-        entity := create_entity(&global.world)
-        add_component(&global.world.transforms, entity, 
-            TransformData{cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2})
-        add_component(&global.world.players, entity, PlayerData{})
-        add_component(&global.world.render, entity, RenderData{})
-    }
-}
-
-player_render_system :: TickSystem {
+setup_camera_system :: TickSystem {
     proc(global: ^GlobalState, delta_time: f32) {
-        for entity, _ in global.world.players.index {
-            transform := get_component(&global.world.transforms, entity)
-            render := get_component(&global.world.render, entity)
-
-            assert(transform != nil, "Player entity must have a transform component")
-            assert(render != nil, "Player entity must have a render component")
-
-            rl.DrawRectangleV(
-                rl.Vector2{transform.x, transform.y}, 
-                rl.Vector2{25, 25}, 
-                rl.WHITE
-            )
+        global.Camera = rl.Camera2D{
+            {cast(f32)global.window.width/2, cast(f32)global.window.height/2},
+            {cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2},
+            0,
+            1,
         }
     }
 }
 
-player_movement_system :: TickSystem {
-    proc(global: ^GlobalState, detla_time: f32) {
-        for entity, _ in global.world.players.index {
-            transform := get_component(&global.world.transforms, entity)
-            assert(transform != nil, "Player entity must have a transform component")
+follow_player_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        player_transform: ^TransformData = nil
 
-            if rl.IsKeyDown(.D) {
-                transform.x += 100 * detla_time 
+        for player, _ in global.world.players.index {
+            player_transform = get_component(&global.world.transforms, player)
+            if player_transform == nil {
+                continue
             }
-            if rl.IsKeyDown(.A) {
-                transform.x -= 100 * detla_time
-            }
-            if rl.IsKeyDown(.W) {
-                transform.y -= 100 * detla_time
-            }
-            if rl.IsKeyDown(.S) {
-                transform.y += 100 * detla_time
-            }
+
+            break
         }
+
+        assert(player_transform != nil, "There must be a player entity with a transform component")
+
+        global.Camera.target = rl.Vector2{player_transform.x, player_transform.y}
     }
 }
-
 
 text: cstring = "@#$%&ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
 
 main :: proc() {
     global := GlobalState{}
-    add_system(&global.world.init_systems, create_player_system)
-    add_system(&global.world.tick_systems, player_movement_system)
-    add_system(&global.world.render_systems, player_render_system)
+    add_system(&global.world.tick_systems, setup_camera_system)
+    add_system(&global.world.tick_systems, follow_player_system)
+
+    register_player_systems(&global)
+    register_enemy_systems(&global)
+    register_collision_systems(&global)
     
-    add_system(&global.world.init_systems, create_enemy_spawner_system)
-    add_system(&global.world.tick_systems, spawn_enemy_system)
-    add_system(&global.world.tick_systems, enemy_movement_system)
-    add_system(&global.world.render_systems, render_enemy_system)
+    add_system(&global.world.tick_systems, kill_system)
+
+    add_system(&global.world.tick_systems, toggle_debug_system)
+    add_system(&global.world.render_systems, debug_colliders_system)
 
     add_system(&global.world.init_systems, create_card_system)
     add_system(&global.world.ui_systems, render_card_system)
@@ -210,7 +143,6 @@ main :: proc() {
     }
     rl.SetTargetFPS(144)
     last_time := rl.GetTime()
-
 
     // Font loading
     codepoint_count: i32
@@ -244,10 +176,12 @@ main :: proc() {
 
         rl.BeginDrawing()
         rl.ClearBackground(rl.BLACK)
-
+        
+        rl.BeginMode2D(global.Camera)
         for system in global.world.render_systems.systems {
             system.update(&global, delta_time)
         }
+        rl.EndMode2D()
 
         for system in global.world.ui_systems.systems {
             system.update(&global, delta_time)
