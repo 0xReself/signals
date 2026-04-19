@@ -9,7 +9,8 @@ SCREEN_HEIGHT :: 450
 GlobalState :: struct {
     world: World,
     window: Window,
-    font: rl.Font
+    font: rl.Font,
+    interaction: InteractionState,
 }
 
 Window :: struct {
@@ -88,9 +89,6 @@ main :: proc() {
     add_system(&global.world.tick_systems, player_movement_system)
     add_system(&global.world.render_systems, player_render_system)
 
-    add_system(&global.world.init_systems, create_card_system)
-    add_system(&global.world.ui_systems, render_card_system)
-
     rl.SetConfigFlags({.WINDOW_RESIZABLE})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Signals")
 
@@ -138,8 +136,11 @@ main :: proc() {
             system.update(&global, delta_time)
         }
 
-        tree := ui_tree()
-        draw_ui(&global, tree, {0, 0})
+        update_interaction_input(&global.interaction)
+        tree := ui_tree(&global.interaction)
+        compute_layout(tree, global.font, cast(f32)global.window.width, cast(f32)global.window.height)
+        process_interactions(&global.interaction, tree)
+        draw_ui(&global, tree)
 
         rl.EndDrawing()
     }

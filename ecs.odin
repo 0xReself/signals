@@ -8,12 +8,10 @@ World :: struct {
     players: ComponentStorage(PlayerData),
     enemies: ComponentStorage(EnemyData),
     render: ComponentStorage(RenderData),
-    cards: ComponentStorage(CardData),
 
     init_systems: SystemStorage(System),
     tick_systems: SystemStorage(TickSystem),
     render_systems: SystemStorage(TickSystem),
-    ui_systems: SystemStorage(TickSystem),
 }
 
 create_entity :: proc(world: ^World) -> Entity {
