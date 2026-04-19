@@ -1,5 +1,6 @@
 package main
 
+import "core:fmt"
 import rl "vendor:raylib"
 
 GlobalState :: struct {
@@ -30,8 +31,8 @@ create_player :: System {
     }
 }
 
-player_render_system :: System {
-    proc(global: ^GlobalState) {
+player_render_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
         for entity, _ in global.world.players.index {
             transform := get_component(&global.world.transforms, entity)
             render := get_component(&global.world.render, entity)
@@ -48,23 +49,23 @@ player_render_system :: System {
     }
 }
 
-player_movement_system :: System {
-    proc(global: ^GlobalState) {
+player_movement_system :: TickSystem {
+    proc(global: ^GlobalState, detla_time: f32) {
         for entity, _ in global.world.players.index {
             transform := get_component(&global.world.transforms, entity)
             assert(transform != nil, "Player entity must have a transform component")
 
             if rl.IsKeyDown(.D) {
-                transform.x += 5 
+                transform.x += 100 * detla_time 
             }
             if rl.IsKeyDown(.A) {
-                transform.x -= 5
+                transform.x -= 100 * detla_time
             }
             if rl.IsKeyDown(.W) {
-                transform.y -= 5
+                transform.y -= 100 * detla_time
             }
             if rl.IsKeyDown(.S) {
-                transform.y += 5
+                transform.y += 100 * detla_time
             }
         }
     }
@@ -88,19 +89,28 @@ main :: proc() {
         system.update(&global)
     }
     rl.SetTargetFPS(144)
-
+    last_time := rl.GetTime()
     for !rl.WindowShouldClose() {
+        current_time := rl.GetTime()
+        delta_time := cast(f32)(current_time - last_time)
+        last_time = current_time
+
         if rl.IsKeyDown(.ESCAPE) {
             break;
         }
         for system in global.world.tick_systems.systems {
-            system.update(&global)
+            system.update(&global, delta_time)
         }
 
         rl.BeginDrawing()
         rl.ClearBackground(rl.BLACK)
+
         for system in global.world.render_systems.systems {
-            system.update(&global)
+            system.update(&global, delta_time)
+        }
+
+        for system in global.world.ui_systems.systems {
+            system.update(&global, delta_time)
         }
         rl.EndDrawing()
     }

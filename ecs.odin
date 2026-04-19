@@ -9,9 +9,10 @@ World :: struct {
     enemies: ComponentStorage(EnemyData),
     render: ComponentStorage(RenderData),
 
-    init_systems: SystemStorage,
-    tick_systems: SystemStorage,
-    render_systems: SystemStorage,
+    init_systems: SystemStorage(System),
+    tick_systems: SystemStorage(TickSystem),
+    render_systems: SystemStorage(TickSystem),
+    ui_systems: SystemStorage(TickSystem),
 }
 
 create_entity :: proc(world: ^World) -> Entity {
@@ -43,10 +44,14 @@ System :: struct {
     update: proc(global: ^GlobalState)
 }
 
-SystemStorage :: struct {
-    systems: [dynamic]System,
+TickSystem :: struct {
+    update: proc(global: ^GlobalState, delta_time: f32)
 }
 
-add_system :: proc(storage: ^SystemStorage, system: System) {
+SystemStorage :: struct($T: typeid) {
+    systems: [dynamic]T,
+}
+
+add_system :: proc(storage: ^SystemStorage($T), system: T) {
     append(&storage.systems, system)
 }
