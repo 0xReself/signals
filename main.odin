@@ -4,7 +4,7 @@ import rl "vendor:raylib"
 import "core:slice"
 
 SCREEN_WIDTH :: 800
-SCREEN_HEIGHT :: 450
+SCREEN_HEIGHT :: 450 
 
 GlobalState :: struct {
     world: World,
@@ -23,11 +23,117 @@ TransformData :: struct {
 }
 
 PlayerData :: struct {}
-EnemyData :: struct {}
+
+ENEMY_LABELS :: [5]cstring {"@", "#", "$", "%", "&"}
+EnemyData :: struct {
+    label: cstring,
+    speed: f32,
+}
 RenderData :: struct {
-    color: rl.Color
+    _: bool, // Just to have some data in render component for now
 }
 
+CircleCollider :: struct {
+    radius: f32
+}
+
+EnemySpawnerData :: struct {
+    timer: f32,
+    interval: f32, // how much seconds to spawn enemy
+}
+
+create_enemy_spawner_system :: System {
+    proc(global: ^GlobalState) {
+        entity := create_entity(&global.world)
+        add_component(&global.world.enemy_spawners, entity, EnemySpawnerData{0, 2})
+    }
+}
+
+spawn_enemy_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        for entity, _ in global.world.enemy_spawners.index {
+            spawner := get_component(&global.world.enemy_spawners, entity)
+            if spawner == nil {
+                continue
+            }
+
+            spawner.timer += delta_time
+            if spawner.timer >= spawner.interval {
+                spawner.timer = 0
+
+                enemy_entity := create_entity(&global.world)
+
+                //Get somewhat random position on screen
+                width := rl.GetRandomValue(0, global.window.height)
+                height := rl.GetRandomValue(0, global.window.height)
+                add_component(&global.world.transforms, enemy_entity, 
+                    TransformData{cast(f32)width, cast(f32)height})
+
+                //Get random label for enemy
+                label_index := rl.GetRandomValue(0, len(ENEMY_LABELS)-1)
+                labels := ENEMY_LABELS
+                add_component(&global.world.enemies, 
+                    enemy_entity, 
+                    EnemyData{labels[label_index], 50}
+                )
+                add_component(&global.world.render, enemy_entity, RenderData{})
+            }
+        }
+    }
+}
+
+render_enemy_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        for entity, _ in global.world.enemies.index {
+            transform := get_component(&global.world.transforms, entity)
+            render := get_component(&global.world.render, entity)
+            enemy := get_component(&global.world.enemies, entity)
+
+            assert(transform != nil, "Enemy entity must have a transform component")
+            assert(render != nil, "Enemy entity must have a render component")
+
+            rl.DrawTextEx(
+                global.font,
+                enemy.label,
+                { transform.x, transform.y },
+                36,
+                0,
+                rl.Color{255, 255, 255, 127}
+            )
+        }
+    }
+}
+
+enemy_movement_system :: TickSystem {
+    proc(global: ^GlobalState, delta_time: f32) {
+        for entity, _ in global.world.enemies.index {
+            transform := get_component(&global.world.transforms, entity)
+            assert(transform != nil, "Enemy entity must have a transform component")
+            enemy := get_component(&global.world.enemies, entity)
+
+            player_transform: ^TransformData = nil
+
+            for player, _ in global.world.players.index {
+                player_transform = get_component(&global.world.transforms, player)
+                if player_transform == nil {
+                    continue
+                }
+
+                break
+            }
+
+            assert(player_transform != nil, "There must be a player entity with a transform component")
+            
+            current_position := rl.Vector2{transform.x, transform.y}
+            player_position := rl.Vector2{player_transform.x, player_transform.y}
+            direction := player_position - current_position
+            normalized_direction := rl.Vector2Normalize(direction)
+            
+            transform.x += normalized_direction.x * enemy.speed * delta_time
+            transform.y += normalized_direction.y * enemy.speed * delta_time
+        }
+    }
+}
 
 create_player_system :: System {
     proc(global: ^GlobalState) {
@@ -35,7 +141,7 @@ create_player_system :: System {
         add_component(&global.world.transforms, entity, 
             TransformData{cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2})
         add_component(&global.world.players, entity, PlayerData{})
-        add_component(&global.world.render, entity, RenderData{rl.BLUE})
+        add_component(&global.world.render, entity, RenderData{})
     }
 }
 
@@ -51,7 +157,7 @@ player_render_system :: TickSystem {
             rl.DrawRectangleV(
                 rl.Vector2{transform.x, transform.y}, 
                 rl.Vector2{25, 25}, 
-                render.color
+                rl.WHITE
             )
         }
     }
@@ -80,13 +186,18 @@ player_movement_system :: TickSystem {
 }
 
 
-text: cstring = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
+text: cstring = "@#$%&ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
 
 main :: proc() {
     global := GlobalState{}
     add_system(&global.world.init_systems, create_player_system)
     add_system(&global.world.tick_systems, player_movement_system)
     add_system(&global.world.render_systems, player_render_system)
+    
+    add_system(&global.world.init_systems, create_enemy_spawner_system)
+    add_system(&global.world.tick_systems, spawn_enemy_system)
+    add_system(&global.world.tick_systems, enemy_movement_system)
+    add_system(&global.world.render_systems, render_enemy_system)
 
     add_system(&global.world.init_systems, create_card_system)
     add_system(&global.world.ui_systems, render_card_system)

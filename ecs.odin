@@ -9,6 +9,7 @@ World :: struct {
     enemies: ComponentStorage(EnemyData),
     render: ComponentStorage(RenderData),
     cards: ComponentStorage(CardData),
+    enemy_spawners: ComponentStorage(EnemySpawnerData),
 
     init_systems: SystemStorage(System),
     tick_systems: SystemStorage(TickSystem),

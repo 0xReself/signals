@@ -2,6 +2,8 @@ package main
 
 import rl "vendor:raylib"
 
+
+
 CardData :: struct {
 	label: cstring,
 	bg: rl.Color,
