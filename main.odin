@@ -1,16 +1,21 @@
 package main
 
-import "core:fmt"
 import rl "vendor:raylib"
 import "core:slice"
 
+SCREEN_WIDTH :: 800
+SCREEN_HEIGHT :: 450
+
 GlobalState :: struct {
-    screen_width: u32,
-    screen_height: u32,
     world: World,
+    window: Window,
     font: rl.Font
 }
 
+Window :: struct {
+    width: i32,
+    height: i32,
+}
 
 TransformData :: struct {
     x: f32,
@@ -23,11 +28,12 @@ RenderData :: struct {
     color: rl.Color
 }
 
-create_player :: System {
+
+create_player_system :: System {
     proc(global: ^GlobalState) {
         entity := create_entity(&global.world)
         add_component(&global.world.transforms, entity, 
-            TransformData{cast(f32)global.screen_width/2, cast(f32)global.screen_height/2})
+            TransformData{cast(f32)SCREEN_WIDTH/2, cast(f32)SCREEN_HEIGHT/2})
         add_component(&global.world.players, entity, PlayerData{})
         add_component(&global.world.render, entity, RenderData{rl.BLUE})
     }
@@ -72,26 +78,20 @@ player_movement_system :: TickSystem {
         }
     }
 }
-SCREEN_WIDTH :: 800
-SCREEN_HEIGHT :: 450
 
 
 text: cstring = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvxyz"
 
 main :: proc() {
-    global := GlobalState{
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        World{},
-    }
-    add_system(&global.world.init_systems, create_player)
+    global := GlobalState{}
+    add_system(&global.world.init_systems, create_player_system)
     add_system(&global.world.tick_systems, player_movement_system)
     add_system(&global.world.render_systems, player_render_system)
 
     add_system(&global.world.init_systems, create_card_system)
     add_system(&global.world.ui_systems, render_card_system)
 
-
+    rl.SetConfigFlags({.WINDOW_RESIZABLE})
     rl.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Signals")
 
     for system in global.world.init_systems.systems {
@@ -118,6 +118,10 @@ main :: proc() {
         current_time := rl.GetTime()
         delta_time := cast(f32)(current_time - last_time)
         last_time = current_time
+
+        //Get Current window dimensions for global state
+        global.window.width = rl.GetScreenWidth()
+        global.window.height = rl.GetScreenHeight()
 
         if rl.IsKeyDown(.ESCAPE) {
             break;
