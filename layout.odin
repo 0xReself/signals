@@ -71,7 +71,7 @@ Node :: union {
 }
 
 Layout_Node :: struct {
-    id:         Maybe(cstring),
+    idx:        int,
     size:       NodeSize,
     position:   Position,
     direction:  Direction,
@@ -88,7 +88,7 @@ Layout_Node :: struct {
 }
 
 Text_Node :: struct {
-    id:        Maybe(cstring),
+    idx:       int,
     text:      cstring,
     font_size: f32,
     color:     rl.Color,
@@ -96,6 +96,23 @@ Text_Node :: struct {
     position:  Position,
     computed_pos:  rl.Vector2,
     computed_size: rl.Vector2,
+}
+
+NodeEvent :: struct {
+    hovered:       bool,
+    pressed:       bool,
+    just_pressed:  bool,
+    just_released: bool,
+}
+
+UI :: struct {
+    cursor:          int,
+    prev_events:     [dynamic]NodeEvent,
+    curr_events:     [dynamic]NodeEvent,
+    mouse_pos:       rl.Vector2,
+    mouse_down:      bool,
+    prev_mouse_down: bool,
+    press_target:    Maybe(int),
 }
 
 fixed :: proc(w: f32, h: f32) -> NodeSize {
@@ -110,9 +127,41 @@ fit :: proc() -> NodeSize {
     return { width = Fit{}, height = Fit{} }
 }
 
+get_events :: proc(ui: ^UI) -> (NodeEvent, int) {
+    idx := ui.cursor
+    ui.cursor += 1
+    ev: NodeEvent
+    if idx < len(ui.prev_events) {
+        ev = ui.prev_events[idx]
+    }
+    return ev, idx
+}
+
+begin_frame :: proc(ui: ^UI) {
+    ui.cursor = 0
+    clear(&ui.curr_events)
+    ui.prev_mouse_down = ui.mouse_down
+    ui.mouse_pos = rl.GetMousePosition()
+    ui.mouse_down = rl.IsMouseButtonDown(.LEFT)
+}
+
+end_frame :: proc(ui: ^UI) {
+    ui.prev_events, ui.curr_events = ui.curr_events, ui.prev_events
+}
+
+assign_idx :: proc(ui: ^UI, reserved: Maybe(int) = nil) -> int {
+    if idx, ok := reserved.?; ok {
+        return idx
+    }
+    idx := ui.cursor
+    ui.cursor += 1
+    return idx
+}
+
 layout :: proc(
+    ui: ^UI,
     size: NodeSize,
-    id: Maybe(cstring) = nil,
+    reserved_idx: Maybe(int) = nil,
     dir: Direction = .Column,
     pos: Position = Relative{},
     gap: f32 = 0,
@@ -124,11 +173,12 @@ layout :: proc(
     border: Border = {},
     children: ..^Node,
 ) -> ^Node {
+    idx := assign_idx(ui, reserved_idx)
     n := new(Node)
     kids: [dynamic]^Node
     for c in children { append(&kids, c) }
     n^ = Layout_Node {
-        id         = id,
+        idx        = idx,
         size       = size,
         position   = pos,
         direction  = dir,
@@ -145,16 +195,18 @@ layout :: proc(
 }
 
 text :: proc(
+    ui: ^UI,
     t: cstring,
-    id: Maybe(cstring) = nil,
+    reserved_idx: Maybe(int) = nil,
     size: f32 = 18,
     color: rl.Color = rl.WHITE,
     margin: Spacing = {},
     pos: Position = Relative{},
 ) -> ^Node {
+    idx := assign_idx(ui, reserved_idx)
     n := new(Node)
     n^ = Text_Node {
-        id        = id,
+        idx       = idx,
         text      = t,
         font_size = size,
         color     = color,
@@ -203,6 +255,101 @@ set_computed_size :: proc(node: ^Node, size: rl.Vector2) {
     switch &v in node^ {
     case Layout_Node: v.computed_size = size
     case Text_Node:   v.computed_size = size
+    }
+}
+
+get_node_idx :: proc(node: ^Node) -> int {
+    switch v in node^ {
+    case Layout_Node: return v.idx
+    case Text_Node:   return v.idx
+    }
+    return -1
+}
+
+get_node_bounds :: proc(node: ^Node) -> (rl.Vector2, rl.Vector2) {
+    switch v in node^ {
+    case Layout_Node: return v.computed_pos, v.computed_size
+    case Text_Node:   return v.computed_pos, v.computed_size
+    }
+    return {}, {}
+}
+
+point_in_rect :: proc(point: rl.Vector2, pos: rl.Vector2, size: rl.Vector2) -> bool {
+    return point.x >= pos.x && point.x <= pos.x + size.x &&
+           point.y >= pos.y && point.y <= pos.y + size.y
+}
+
+process_interactions :: proc(ui: ^UI, root: ^Node) {
+    node_count := ui.cursor
+    resize(&ui.curr_events, node_count)
+    for i := 0; i < node_count; i += 1 {
+        ui.curr_events[i] = {}
+    }
+
+    hovered_nodes: [dynamic]int
+    defer delete(hovered_nodes)
+    hit_test_node(root, ui.mouse_pos, &hovered_nodes)
+
+    for idx in hovered_nodes {
+        if idx >= 0 && idx < node_count {
+            ui.curr_events[idx].hovered = true
+        }
+    }
+
+    topmost_hit: Maybe(int)
+    if len(hovered_nodes) > 0 {
+        topmost_hit = hovered_nodes[len(hovered_nodes) - 1]
+    }
+
+    mouse_just_down := ui.mouse_down && !ui.prev_mouse_down
+    mouse_just_up := !ui.mouse_down && ui.prev_mouse_down
+
+    if mouse_just_down {
+        if hit, ok := topmost_hit.?; ok {
+            ui.press_target = hit
+            if hit >= 0 && hit < node_count {
+                ui.curr_events[hit].just_pressed = true
+                ui.curr_events[hit].pressed = true
+            }
+        }
+    }
+
+    if ui.mouse_down {
+        if target, ok := ui.press_target.?; ok {
+            if target >= 0 && target < node_count {
+                ui.curr_events[target].pressed = true
+            }
+        }
+    }
+
+    if mouse_just_up {
+        if target, ok := ui.press_target.?; ok {
+            if target >= 0 && target < node_count {
+                ui.curr_events[target].just_released = true
+                ui.curr_events[target].pressed = false
+            }
+            ui.press_target = nil
+        }
+    }
+}
+
+hit_test_node :: proc(node: ^Node, mouse_pos: rl.Vector2, hits: ^[dynamic]int) {
+    pos, size := get_node_bounds(node)
+    if !point_in_rect(mouse_pos, pos, size) {
+        return
+    }
+
+    append(hits, get_node_idx(node))
+
+    switch v in node^ {
+    case Layout_Node:
+        for c in v.children {
+            if !is_absolute(c) { hit_test_node(c, mouse_pos, hits) }
+        }
+        for c in v.children {
+            if is_absolute(c) { hit_test_node(c, mouse_pos, hits) }
+        }
+    case Text_Node:
     }
 }
 
@@ -478,118 +625,6 @@ resolve_child_cross_axis :: proc(node: ^Node, parent_dir: Direction, cross_space
             } else {
                 v.computed_size.x = cross_space - m.left - m.right
             }
-        }
-    case Text_Node:
-    }
-}
-
-NodeEvent :: struct {
-    hovered:       bool,
-    pressed:       bool,
-    just_pressed:  bool,
-    just_released: bool,
-}
-
-InteractionState :: struct {
-    mouse_pos:       rl.Vector2,
-    mouse_down:      bool,
-    prev_mouse_down: bool,
-    events:          map[cstring]NodeEvent,
-    press_target:    Maybe(cstring),
-}
-
-update_interaction_input :: proc(state: ^InteractionState) {
-    state.prev_mouse_down = state.mouse_down
-    state.mouse_pos = rl.GetMousePosition()
-    state.mouse_down = rl.IsMouseButtonDown(.LEFT)
-}
-
-get_event :: proc(state: ^InteractionState, id: cstring) -> NodeEvent {
-    ev, ok := state.events[id]
-    if ok { return ev }
-    return {}
-}
-
-process_interactions :: proc(state: ^InteractionState, root: ^Node) {
-    clear(&state.events)
-
-    topmost_hit: Maybe(cstring)
-    hit_test_node(root, state.mouse_pos, &topmost_hit)
-
-    mouse_just_down := state.mouse_down && !state.prev_mouse_down
-    mouse_just_up := !state.mouse_down && state.prev_mouse_down
-
-    if hit, ok := topmost_hit.?; ok {
-        ev := state.events[hit]
-        ev.hovered = true
-        state.events[hit] = ev
-    }
-
-    if mouse_just_down {
-        if hit, ok := topmost_hit.?; ok {
-            state.press_target = hit
-            ev := state.events[hit]
-            ev.just_pressed = true
-            ev.pressed = true
-            state.events[hit] = ev
-        }
-    }
-
-    if state.mouse_down {
-        if target, ok := state.press_target.?; ok {
-            ev := state.events[target]
-            ev.pressed = true
-            state.events[target] = ev
-        }
-    }
-
-    if mouse_just_up {
-        if target, ok := state.press_target.?; ok {
-            ev := state.events[target]
-            ev.just_released = true
-            ev.pressed = false
-            state.events[target] = ev
-            state.press_target = nil
-        }
-    }
-}
-
-get_node_id :: proc(node: ^Node) -> Maybe(cstring) {
-    switch v in node^ {
-    case Layout_Node: return v.id
-    case Text_Node:   return v.id
-    }
-    return nil
-}
-
-get_node_bounds :: proc(node: ^Node) -> (rl.Vector2, rl.Vector2) {
-    switch v in node^ {
-    case Layout_Node: return v.computed_pos, v.computed_size
-    case Text_Node:   return v.computed_pos, v.computed_size
-    }
-    return {}, {}
-}
-
-point_in_rect :: proc(point: rl.Vector2, pos: rl.Vector2, size: rl.Vector2) -> bool {
-    return point.x >= pos.x && point.x <= pos.x + size.x &&
-           point.y >= pos.y && point.y <= pos.y + size.y
-}
-
-hit_test_node :: proc(node: ^Node, mouse_pos: rl.Vector2, hit: ^Maybe(cstring)) {
-    if id, ok := get_node_id(node).?; ok {
-        pos, size := get_node_bounds(node)
-        if point_in_rect(mouse_pos, pos, size) {
-            hit^ = id
-        }
-    }
-
-    switch v in node^ {
-    case Layout_Node:
-        for c in v.children {
-            if !is_absolute(c) { hit_test_node(c, mouse_pos, hit) }
-        }
-        for c in v.children {
-            if is_absolute(c) { hit_test_node(c, mouse_pos, hit) }
         }
     case Text_Node:
     }

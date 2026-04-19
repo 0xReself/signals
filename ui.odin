@@ -21,7 +21,7 @@ SlotData :: struct {
     pos: SlotPosition,
 }
 
-ui_tree :: proc(state: ^InteractionState) -> ^Node {
+ui_tree :: proc(ui: ^UI) -> ^Node {
     card_data := CardData {
         "Boomerang",
         rl.GREEN,
@@ -30,77 +30,69 @@ ui_tree :: proc(state: ^InteractionState) -> ^Node {
         {.BOTTOM_LEFT, .TOP_RIGHT},
     }
 
-    return layout(
+    return layout(ui,
         size = grow(),
         dir = .Column,
         padding = spacing(50),
         gap = 8,
         children = {
-            layout(
-                size = {width = Grow{1}, height = Fit{}},
-                dir = .Row,
-                gap = 8,
+            layout(ui, size = {width = Grow{1}, height = Fit{}}, dir = .Row, gap = 8,
                 children = {
-                    card_ui(card_data, "card-1", state),
-                    card_ui(card_data, "card-2", state),
-                    card_ui(card_data, "card-3", state),
+                    card_ui(card_data, ui),
+                    card_ui(card_data, ui),
+                    card_ui(card_data, ui),
                 },
             ),
         },
     )
 }
 
-card_ui :: proc(card: CardData, id: cstring, state: ^InteractionState) -> ^Node {
-    ev := get_event(state, id)
+card_ui :: proc(card: CardData, ui: ^UI) -> ^Node {
+    ev, idx := get_events(ui)
 
-    bg_color := rl.BLACK 
-    if ev.hovered { bg_color = rl.Color{25,25,25,255} }
+    bg_color := rl.BLACK
+    if ev.hovered { bg_color = rl.Color{25, 25, 25, 255} }
 
-    return layout(
-        id = id,
+    return layout(ui,
         size = fixed(110, 125),
+        reserved_idx = idx,
         border = Border{card.bg, 1},
         bg = bg_color,
         children = {
-            layout(
-                size = {width = Grow{1}, height = Fit{}},
-                padding = spacing(2),
-                bg = card.bg,
+            layout(ui, size = {width = Grow{1}, height = Fit{}}, padding = spacing(2), bg = card.bg,
                 children = {
-                    text(card.label, color = card.fg),
+                    text(ui, card.label, color = card.fg),
                 },
             ),
-            layout(
-                size = grow(),
-                pos = Relative{},
+            layout(ui, size = grow(),
                 children = {
-                    slot_ui(SlotData{.TOP_RIGHT}, "slot-1", state),
-                    slot_ui(SlotData{.BOTTOM_RIGHT}, "slot-2", state)
-                }
+                    slot_ui(SlotData{.TOP_RIGHT}, ui),
+                    slot_ui(SlotData{.BOTTOM_RIGHT}, ui),
+                },
             ),
         },
     )
 }
 
-slot_ui :: proc(slot: SlotData, id: cstring, state: ^InteractionState) -> ^Node {
-    ev := get_event(state, id)
+slot_ui :: proc(slot: SlotData, ui: ^UI) -> ^Node {
+    ev, idx := get_events(ui)
 
-    border_color := rl.Color{128, 128, 128, 255} 
-    if ev.hovered { border_color = rl.Color{158,158,158,255} }
+    border_color: rl.Color = {128, 128, 128, 255}
+    if ev.hovered { border_color = {158, 158, 158, 255} }
 
-    OFFSET :: 8
-    pos := Absolute{}
+    OFFSET: f32 = 8
+    pos: Position = Absolute{}
 
-    if slot.pos == .TOP_LEFT { pos = Absolute {top = OFFSET, left = OFFSET} }
-    if slot.pos == .TOP_RIGHT { pos = Absolute {top = OFFSET, right = OFFSET} }
-    if slot.pos == .BOTTOM_LEFT { pos = Absolute {bottom = OFFSET, left = OFFSET} }
-    if slot.pos == .BOTTOM_RIGHT { pos = Absolute {bottom = OFFSET, right = OFFSET} }
+    if slot.pos == .TOP_LEFT { pos = Absolute{top = OFFSET, left = OFFSET} }
+    if slot.pos == .TOP_RIGHT { pos = Absolute{top = OFFSET, right = OFFSET} }
+    if slot.pos == .BOTTOM_LEFT { pos = Absolute{bottom = OFFSET, left = OFFSET} }
+    if slot.pos == .BOTTOM_RIGHT { pos = Absolute{bottom = OFFSET, right = OFFSET} }
 
-    return layout(
-        id = id,
+    return layout(ui,
         size = fixed(11, 11),
-        pos = pos, 
-        border = Border{border_color, 2}
+        reserved_idx = idx,
+        pos = pos,
+        border = Border{border_color, 2},
     )
 }
 

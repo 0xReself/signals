@@ -10,7 +10,7 @@ GlobalState :: struct {
     world: World,
     window: Window,
     font: rl.Font,
-    interaction: InteractionState,
+    ui: UI,
 }
 
 Window :: struct {
@@ -136,10 +136,11 @@ main :: proc() {
             system.update(&global, delta_time)
         }
 
-        update_interaction_input(&global.interaction)
-        tree := ui_tree(&global.interaction)
+        begin_frame(&global.ui)
+        tree := ui_tree(&global.ui)
         compute_layout(tree, global.font, cast(f32)global.window.width, cast(f32)global.window.height)
-        process_interactions(&global.interaction, tree)
+        process_interactions(&global.ui, tree)
+        end_frame(&global.ui)
         draw_ui(&global, tree)
 
         rl.EndDrawing()
